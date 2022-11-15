@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>{% block title %}Let's Bl😉g{% endblock %}</title>
+
+   <link rel="stylesheet" href={{ url_for("static", filename="/assets/css/style.css") }}>
+
+</head>
+<body>
+   {% block header_1 %}
+   <header class="header content-wrapper">
+      <div class="wrapper max-w-1000"> 
+         <div class="left">
+            <a href="/">
+               <div class="logo-text">
+                  <h1 title="Home">Let's Bl😉g.</h1>
+               </div>
+            </a>
+         </div>
+         <div class="right">
+            <a href="/login"><span class="btn">Login</span></a>
+            <a href="/sign-up"><span class="btn l-mar-10">Sign Up</span></a>
+         </div>
+      </div>
+   </header>
+   {% endblock %}
+   
+   {% block header_2 %}
+   <header class="content-wrapper">
+      <div class="wrapper-rl max-w-1000"> 
+         <div class="left">
+            <a href="/">
+               <div class="logo-text">
+                  <h1 title="Home">Let's Bl😉g.</h1>
+               </div>
+            </a>
+         </div>
+      </div>
+   </header>
+   {% endblock %}
+
+
+   {% block main %}{% endblock %}
+   
+   {% block footer %}
+   <footer class="t-pad-100">
+      <div class="footer-wrapper">
+         <div class="owner-container tb-pad-40 max-w-1000">
+            <h3 class="who">Made by Chukwu Daniel 😁</h3>
+         </div>
+      </div>
+   </footer>
+   {% endblock %}
+
+   {% block script %}
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.3/gsap.min.js"></script>
+   <script src={{url_for("static", filename="/js/index.js")}}></script>
+   {% endblock %}
+
+   
+</body>
+</html>
