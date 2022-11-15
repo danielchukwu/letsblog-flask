@@ -151,11 +151,11 @@ class DbManager:
       else: return False
 
 
-   def update_user(self, id, data : dict()):
+   def update_user(self, user_id, data : dict()):
       for key, value in data.items():
          self.cur.execute(f"""
          BEGIN;
-         UPDATE users SET {key} = %s WHERE id = {id};
+         UPDATE users SET {key} = %s WHERE id = {user_id};
          COMMIT;
          """, (value,))
       
@@ -165,10 +165,6 @@ class DbManager:
    def create_blog(self, data):
       # id, title, img, content, 
       category = self.get_category(data["category"].lower())
-      # print("Called create blog")
-      # print(data)
-      # print(f"Type: {type(data['id'])}")
-      # print(title)
 
       self.cur.execute("""
       BEGIN;
@@ -209,14 +205,52 @@ class DbManager:
 
 
    def create_categories_blogs(self, cat_id, b_id):
+      print(f'Create Categories and Blogs Relationship WIth: {cat_id} {b_id}')
+      
       self.cur.execute("""
       BEGIN;
       INSERT INTO categories_blogs (category_id, blog_id)
       VALUES (%s, %s);
       COMMIT;
       """, (cat_id, b_id,))
-      print("categories_blogs record updated")
+      # print("categories_blogs record updated")
       return
+
+
+   def delete_categories_blogs(self, b_id):
+      print(f'Remove Categories and Blogs Relationship: {b_id}')
+      self.cur.execute("""
+      BEGIN;
+      DELETE FROM categories_blogs
+      WHERE blog_id = %s;
+      COMMIT;
+      """, (b_id,))
+      # print("categories_blogs record updated")
+      return
+
+
+   def delete_blog(self, user_id, blog_id):
+      self.cur.execute("""
+      DELETE FROM blogs WHERE (user_id = %s AND id = %s);
+      """, (user_id, blog_id,))
+      # blog = self.cur.fetchone()
+      print(f'Deleted blog: ${blog}')
+
+
+   def update_blog(self, blog_id, data):
+      # Update Category if it's update exists
+      if data.get('category'):
+         category_id = self.get_category( data['category'] )[0]
+         self.delete_categories_blogs(blog_id)
+         self.create_categories_blogs(category_id, blog_id)
+         data.remove('category')
+         
+      for key, value in data.items():
+         self.cur.execute(f"""
+         BEGIN;
+         UPDATE blogs SET {key} = %s WHERE id = {blog_id};
+         COMMIT;
+         """, (value,))
 
 
    def close_cur_conn(self):
@@ -399,7 +433,9 @@ class UserManager:
 # Token Decorator
 def token_required(f):
    def decorator(*args, **kwargs):
-      token = request.args.get('x-access-token')
+      token = request.args.get('x-access-token') if request.args.get('x-access-token') else request.headers.get('X-Access-Token')
+      print(request.headers.get('X-Access-Token'))
+
       user = None
       
       if token:
@@ -411,7 +447,7 @@ def token_required(f):
          if f.__name__ not in OPEN_ROUTES:
             return jsonify({'message': 'a valid token is missing'})
 
-      print(args, kwargs)
+      # print(args, kwargs)
       if kwargs.get('id'):
          return f(kwargs.get('id'), user)
       elif user:
@@ -421,8 +457,6 @@ def token_required(f):
 
    decorator.__name__ = f.__name__
    return decorator
-
-
 
 
 # Create flask app
@@ -441,20 +475,36 @@ def index(owner=None):
    return jsonify(data)
 
 
-@app.route("/api/blogs/<id>")
+@app.route("/api/", methods=['GET'])
 @token_required
-def blog(id, owner=None):
+def get_owner(owner=None):
+   return jsonify({'owner': owner})
+
+
+@app.route("/api/owners/blogs")
+@token_required
+def owners_blogs(owner=None):
    db = DbManager()
-   blog = db.get_blog(id)
+   blogs = db.get_user_blogs(owner["id"])
    db.close_cur_conn()
-   data = {'blog': blog, 'owner': owner}
+   data = {'blogs': blogs, 'owner': owner}
+   return jsonify(data)
+
+
+@app.route("/api/users/<id>/blogs")
+@token_required
+def users_blogs(id, owner=None):
+   db = DbManager()
+   blogs = db.get_user_blogs(id)
+   db.close_cur_conn()
+   data = {'blogs': blogs, 'owner': owner}
    return jsonify(data)
 
 
 @app.route("/api/users/<id>")
 @token_required
 def profile(id, owner=None):
-   print(f"User Id: {id}")
+   # print(f"User Id: {id}")
    if request.method == "GET":
       db = DbManager()
       user = db.get_user(id)
@@ -484,6 +534,7 @@ def update_profile(id, owner=None):
    return jsonify({"message": "successful"})
 
 
+# Authentication
 @app.route("/api/login", methods=["POST"], strict_slashes=False)
 def login():
    db = DbManager()
@@ -509,15 +560,54 @@ def sign_up():
    return jsonify(user)
 
 
+# Blogs
+@app.route("/api/blogs/<id>", methods=["GET"])
+@token_required
+def blog(id, owner=None):
+   db = DbManager()
+   blog = db.get_blog(id)
+   db.close_cur_conn()
+   data = {'blog': blog, 'owner': owner}
+   return jsonify(data)
+
+
 @app.route("/api/blogs", methods=["POST"])
-def create_blog():
+@token_required
+def create_blog(owner=None):
    manager = DbManager()
    data = json.loads(request.data)
+   data['id'] = owner['id']
    blog = manager.create_blog(data)
    blog_id = blog[0]
    manager.close_cur_conn()
 
-   return jsonify(blog_id)
+   return jsonify({"id": blog_id})
+
+
+
+@app.route("/api/blogs/<id>", methods=["DELETE"])
+@token_required
+def delete_blog(id, owner=None):
+   manager = DbManager()
+   user_id = owner['id']
+   manager.delete_blog(user_id, id)
+   manager.close_cur_conn()
+
+   return jsonify({'message': 'testing'})
+
+
+@app.route("/api/blogs/<id>", methods=["PUT"])
+@token_required
+def update_blog(id, owner=None):
+   print("Updating Blog...")
+   manager = DbManager()
+   data = json.loads(request.data)
+   print(data)
+   manager.update_blog(id, data)
+   manager.close_cur_conn()
+   return jsonify({"id": id})
+
+
 
 
 # Run App
