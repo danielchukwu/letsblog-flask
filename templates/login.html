@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block header_2 %}{{ super() }}{% endblock %}}
+{% block header_1 %}{% endblock %}}
+
+
+{% block main %}
+<main class="vh-90 t-pad-vh-10">
+   
+   <div class="rl-wrapper">
+      <div class="rl-container max-w-1000">
+         <div class="rl-grid-container">
+            <div class="left-rl">
+               <div class="rl-image">
+                  <img src={{ url_for("static", filename="/extra/developer.png") }} alt="">
+               </div>
+            </div>
+
+            <div class="right-rl">
+               <div class="form-container">
+                  <div class="form-intro">
+                     <h1 title="Home">Login</h1>
+                  </div>
+                  <form action="#" method="post">
+                     <div class="rl-fields t-mar-10">
+                        <label for="username">Username</label>
+                        <input type="text" name="username" value= "{% if context %}{{ context.username }} {% endif %}" id="username" required>
+                        
+
+                        <label for="password">Password</label>
+                        <input type="password" name="password" id="password" required>
+
+                        <button class="btn-square t-mar-25">Login</button>
+
+                        <p class="t-mar-25">Don't have an account. <a href="/sign-up">Sign up</a></p>
+                        
+                     </div>
+                  </form>
+               </div>
+            </div>
+         </div>
+      </div>
+   </div>
+
+</main>
+{% endblock %}
+
+{% block footer %}{% endblock %}
+{% block script %}{% endblock %}
