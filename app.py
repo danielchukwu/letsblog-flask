@@ -18,7 +18,7 @@ from flask_cors import CORS, cross_origin
 
 ALLOWED_URLS = ["http://localhost:3000"]
 OPEN_ROUTES = ['index']  # Routes that don't require authentication
-DAYS_TOKEN_LAST = 365
+DAYS_TOKEN_LAST = 1
 
 
 # Manage dabatabase related tasks
@@ -67,18 +67,22 @@ class DbManager:
       return blogs
 
 
-   def get_blog(self, id):
+   def get_blog(self, id, owner_id):
       self.cur.execute("""
-         SELECT b.id, b.title, content, img, user_id, c.title, u.username, u.avatar, u.name, u.location, u.bio
+         SELECT b.id, b.title, content, img, user_id, c.title, u.username, u.avatar, u.name, u.location, u.bio,
+         (SELECT COUNT(*) as likes FROM likes WHERE likes.blog_id = %s AND likes.is_like = true ),
+         (SELECT COUNT(*) as dislikes FROM likes WHERE likes.blog_id = %s AND likes.is_like = false )
          FROM blogs as b
          JOIN categories_blogs as cb ON b.id = cb.blog_id
          JOIN categories as c ON c.id = cb.category_id
          JOIN users as u ON b.user_id = u.id
          where b.id = %s;
-      """, (id,))
+      """, (id, id, id,))
       blog_row = self.cur.fetchone()
-      keys = ["id", "title", "content", "img", "user_id", "category", "username", "avatar", "name", "location", "bio"]
+      keys = ["id", "title", "content", "img", "user_id", "category", "username", "avatar", "name", "location", "bio", "likes", "dislikes"]
       blog = { keys[i]:v for i,v in enumerate(blog_row) }
+
+      self.add_owner_liked_blog([blog], owner_id)
 
       return blog
 
@@ -95,7 +99,80 @@ class DbManager:
       user["occupation"] = self.get_occupation(id)
       user["company"] = self.get_company(id)
 
-      return user   
+      return user
+
+
+   def add_comments_likes(self, comments_list):
+      for comment in comments_list:
+         # Get comments likes count
+         self.cur.execute("""
+            SELECT COUNT(*) FROM likes WHERE comment_id = %s AND is_like = true
+         """, (comment['id'],))
+         comment['likes'] = self.cur.fetchone()[0]
+
+         # Get comments dislikes count
+         self.cur.execute("""
+            SELECT COUNT(*) FROM likes WHERE comment_id = %s AND is_like = false
+         """, (comment['id'],))
+         comment['dislikes'] = self.cur.fetchone()[0]
+
+
+   def add_owner_liked_comment(self, comments_list, owner_id):
+      for comment in comments_list:
+         self.cur.execute("""
+            SELECT * FROM likes WHERE comment_id = %s AND user_id = %s AND is_like = true;
+         """, (comment['id'], owner_id))
+
+         comment['liked'] = True if self.cur.fetchone() else False 
+
+         self.cur.execute("""
+            SELECT * FROM likes WHERE comment_id = %s AND user_id = %s AND is_like = false;
+         """, (comment['id'], owner_id))
+
+         comment['disliked'] = True if self.cur.fetchone() else False 
+         
+         print('LIKES and DISLIKES')
+         print(comment['liked'], comment['disliked'])
+      
+      return
+
+
+   def add_owner_liked_blog(self, blog_list, owner_id):
+      for blog in blog_list:
+         self.cur.execute("""
+            SELECT * FROM likes WHERE blog_id = %s AND user_id = %s AND is_like = true;
+         """, (blog['id'], owner_id))
+
+         blog['liked'] = True if self.cur.fetchone() else False 
+
+         self.cur.execute("""
+            SELECT * FROM likes WHERE blog_id = %s AND user_id = %s AND is_like = false;
+         """, (blog['id'], owner_id))
+
+         blog['disliked'] = True if self.cur.fetchone() else False 
+         
+         print('LIKES and DISLIKES')
+         print(blog['liked'], blog['disliked'])
+      
+      return
+
+
+   def get_comments(self, blog_id, owner_id):
+      print(blog_id)
+      self.cur.execute("""
+         SELECT comments.id, user_id, blog_id, comment_id, content, users.username, users.avatar
+         FROM comments 
+         JOIN users ON users.id = comments.user_id
+         WHERE blog_id = %s;
+      """, (blog_id,))
+      comments_raw = self.cur.fetchall()
+      keys = ["id", "user_id", "blog_id", "comment_id", "content", "username", "avatar"]
+      comments = [ { keys[i]:v for i,v in enumerate(row) } for row in comments_raw]
+
+      self.add_comments_likes(comments)
+      self.add_owner_liked_comment(comments, owner_id)
+
+      return comments
 
 
    def get_skills(self, id):
@@ -231,7 +308,9 @@ class DbManager:
 
    def delete_blog(self, user_id, blog_id):
       self.cur.execute("""
+      BEGIN;
       DELETE FROM blogs WHERE (user_id = %s AND id = %s);
+      COMMIT;
       """, (user_id, blog_id,))
       # blog = self.cur.fetchone()
       print(f'Deleted blog: ${blog}')
@@ -251,6 +330,87 @@ class DbManager:
          UPDATE blogs SET {key} = %s WHERE id = {blog_id};
          COMMIT;
          """, (value,))
+
+
+   def like_exists(self, column_id, user_id, an_id):
+      """Check whether a like for either the blog_id column or the comment_id column exists"""
+      # column is either 'user_id' or 'blog_id'
+      if column_id == 'blog_id':
+         self.cur.execute("""
+            SELECT * FROM likes WHERE (user_id = %s AND blog_id = %s)
+         """, (user_id, an_id))
+      else:
+         self.cur.execute("""
+            SELECT * FROM likes WHERE (user_id = %s AND comment_id = %s)
+         """, (user_id, an_id))
+
+
+      like = self.cur.fetchone()
+      print(f"like: {like}")
+      if like:
+         is_like = like[4]
+         return (True, is_like)
+      return (False, None)
+
+
+   def create_like(self, column, user_id, an_id, is_like):
+      """Creates a like for either the blog_id column or the comment_id column"""
+      
+      like_exists, is_like_2 = self.like_exists(column, user_id, an_id)
+      if like_exists == False:
+         # if like doesn't exist, create like
+         if column == 'blog_id':      # For Blogs
+            self.cur.execute("""
+               BEGIN;
+               INSERT INTO likes (user_id, blog_id, is_like) VALUES (%s, %s, %s);
+               COMMIT;
+            """, (user_id, an_id, is_like))
+         else:                        # For Comments
+
+            self.cur.execute("""
+               BEGIN;
+               INSERT INTO likes (user_id, comment_id, is_like) VALUES (%s, %s, %s);
+               COMMIT;
+            """, (user_id, an_id, is_like))
+            
+      else:
+         # If like does exist change is_like
+         if is_like != is_like_2:
+            # if user chose to dislike after liking or vice-versa
+            if column == 'blog_id':   # For Blogs
+               self.cur.execute("""
+                  BEGIN;
+                  UPDATE likes SET is_like = %s WHERE blog_id = %s;
+                  COMMIT;
+               """, (is_like, an_id))
+            else:                     # For Comments
+               self.cur.execute("""
+                  BEGIN;
+                  UPDATE likes SET is_like = %s WHERE comment_id = %s;
+                  COMMIT;
+               """, (is_like, an_id))
+
+         else:
+            # if user chose to re-like or re-dislike which means remove like or dislike, then remove
+            if column == 'blog_id':     # For Blogs
+               self.cur.execute("""
+                  BEGIN;
+                  UPDATE likes SET is_like = %s WHERE blog_id = %s;
+                  COMMIT;
+               """, (None, an_id))
+            else:                       # For Comments
+               self.cur.execute("""
+                  BEGIN;
+                  UPDATE likes SET is_like = %s WHERE comment_id = %s;
+                  COMMIT;
+               """, (None, an_id))
+
+      return
+
+
+   def create_comment(self, data):
+      print("Start creating comment!")
+      return
 
 
    def close_cur_conn(self):
@@ -565,7 +725,8 @@ def sign_up():
 @token_required
 def blog(id, owner=None):
    db = DbManager()
-   blog = db.get_blog(id)
+   blog = db.get_blog(id, owner['id'])
+   # liked = db.is_liked('blog_id', owner['id'], blog['id'])
    db.close_cur_conn()
    data = {'blog': blog, 'owner': owner}
    return jsonify(data)
@@ -599,7 +760,6 @@ def delete_blog(id, owner=None):
 @app.route("/api/blogs/<id>", methods=["PUT"])
 @token_required
 def update_blog(id, owner=None):
-   print("Updating Blog...")
    manager = DbManager()
    data = json.loads(request.data)
    print(data)
@@ -608,7 +768,74 @@ def update_blog(id, owner=None):
    return jsonify({"id": id})
 
 
+@app.route("/api/blogs/comments/<id>", methods=["GET"])
+@token_required
+def get_blogs_comments(id, owner=None):
+   blog_id = id
+   manager = DbManager()
+   comments = manager.get_comments(blog_id, owner['id'])
+   manager.close_cur_conn()
+   print(comments)
+   return jsonify({"comments": comments})
 
+
+# LIKES
+@app.route("/api/blogs/<id>/likes", methods=["GET"])
+@token_required
+def like_blog(id, owner=None):
+   blog_id = id
+   manager = DbManager()
+   manager.create_like('blog_id', owner['id'], blog_id, True)
+   manager.close_cur_conn()
+   return jsonify({"message": 'successful!'})
+
+
+@app.route("/api/blogs/<id>/dislikes", methods=["GET"])
+@token_required
+def dislike_blog(id, owner=None):
+   blog_id = id
+   manager = DbManager()
+   manager.create_like('blog_id', owner['id'], blog_id, False)
+   manager.close_cur_conn()
+   return jsonify({"message": 'successful!'})
+
+
+@app.route("/api/comments/<id>/likes", methods=["GET"])
+@token_required
+def like_comment(id, owner=None):
+   print('Like Comment....')
+   comment_id = id
+   manager = DbManager()
+   manager.create_like('comment_id', owner['id'], comment_id, True)
+   manager.close_cur_conn()
+   return jsonify({"message": 'successful!'})
+
+
+@app.route("/api/comments/<id>/dislikes", methods=["GET"])
+@token_required
+def dislike_comment(id, owner=None):
+   print('DisLike Comment....')
+   comment_id = id
+   manager = DbManager()
+   manager.create_like('comment_id', owner['id'], comment_id, False)
+   manager.close_cur_conn()
+   return jsonify({"message": 'successful!'})
+
+
+# Comments
+@app.route("/api/comments", methods=["POST"])
+@token_required
+def create_comment(owner=None):
+   manager = DbManager()
+   data = json.loads(request.data)
+   data['id'] = owner['id']
+   print(f'body: {data}')
+   comment = manager.create_comment(data)
+   print(f'comment returned: {comment}')
+   # blog_id = blog[0]
+   manager.close_cur_conn()
+
+   return jsonify({"message": "successful!"})
 
 # Run App
 if __name__ == "__main__":
