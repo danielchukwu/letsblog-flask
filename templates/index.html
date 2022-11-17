@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block header_1 %}
+{{super()}}
+{% endblock %}
+{% block header_2 %}{% endblock %}
+
+{% block main %}
+<main class="t-pad-220">
+   <div class="content-wrapper max-w-1000">
+      <div class="grid-wrapper">
+
+         {% for blog in context.blogs %}
+         <a href="/blogs/{{blog.id}}">
+            <div class="blog-card">
+               <div class="blog-img">
+                  <img src="{{blog.img}}" alt="">
+               </div>
+               <div class="blog-text">
+                  <p class="blog-cat tb-pad-20">{{blog.category|title}}</p>
+                  <div class="tc-grid">
+                     <h3>{{blog.title|title|truncate(35, True)}}</h3>
+                     <p class="summary t-pad-25">{{blog.content|truncate(60, True)}}</p>
+                  </div>
+               </div>
+            </div>
+         </a>
+         {% endfor %}
+
+      </div>
+   </div>
+</main>
+{% endblock %}
