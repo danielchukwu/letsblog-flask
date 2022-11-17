@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block header_2 %}{{ super() }}{% endblock %}}
+{% block header_1 %}{% endblock %}}
+
+
+{% block main %}
+<main class="vh-90 t-pad-vh-10">
+   
+   <div class="rl-wrapper">
+      <div class="rl-container max-w-1000">
+         <div class="rl-grid-container">
+            <div class="left-rl">
+               <div class="rl-image">
+                  <img src={{ url_for("static", filename="/extra/developer.png") }} alt="">
+               </div>
+            </div>
+
+            <div class="right-rl">
+               <div class="form-container">
+                  <div class="form-intro">
+                     <h1 title="Home">Create Account</h1>
+                     <p class="t-pad-10">Join us today and start writing amazing Bl😉gs.</p>
+                  </div>
+                  <form action="#" method="POST">
+                     <div class="rl-fields t-mar-10">
+                        <label for="username">Username</label>
+                        <input type="text" name="username" id="username" required>
+                        
+                        <div class="grid-input-2">
+                           <label for="name">Name</label>
+                           <label for="email">Email</label>
+                           
+                           <input type="text" name="name" id="name">
+                           <input type="email" name="email" id="email" required>
+                        </div>
+                        
+                        <div class="grid-input-2">
+                           <label for="occupation">Occupation</label>
+                           <label for="company">Where do you work?</label>
+                           
+                           <input type="text" name="occupation" id="occupation" required>
+                           <input type="text" name="company" id="company" required>
+                        </div>
+
+                        <label for="password">Password</label>
+                        <input type="password" name="password" id="password" required>
+
+                        <button class="btn-square t-mar-25">Sign Up</button>
+
+                        <p class="t-mar-25">Already have an account. <a href="/login">Login</a></p>
+
+                     </div>
+                  </form>
+               </div>
+            </div>
+         </div>
+      </div>
+   </div>
+
+</main>
+{% endblock %}
+
+{% block footer %}{% endblock %}
+{% block script %}{% endblock %}
