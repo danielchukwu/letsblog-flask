@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+
+{% block header_1 %}
+{{super()}}
+{% endblock %}
+{% block header_2 %}{% endblock %}
+
+
+{% block main %}
+   <main class="t-pad-220">
+      <div class="content-wrapper max-w-1000">
+
+         <div class="profile-grid">
+
+         <!-- Profile Main Section -->
+            <div class="pm-wrapper">
+
+               <div class="pm-top-1">
+                  <div class="pm-top">
+                     <div class="slide-img">
+                        {% if context.user.cover %}
+                        <img src="{{ context.user.cover }}" alt="">
+                        {% else %}
+                        <img src="/static/extra/cover-image.jpg" alt="">
+                        {% endif %}
+                     </div>
+                  </div>
+                  <div class="pm-bottom t-pad-25">
+                     <div class="profile-img-container">
+                        <div class="round-img-l">
+                           <img src="{{ context.user.avatar }}" alt="">
+                        </div>
+                     </div>
+                     <div class="pm-intro-container l-pad-20">
+                        <h1>{{ context.user.name }}</h1>
+                        <p class="t-pad-10">{{ context.user.occupation }} at {{ context.user.company }}</p>
+                        <p class="t-pad-10">{{ context.user.location|title }}</p>
+                        <!-- <div class="skills-container">
+                           <span></span>
+                        </div> -->
+                     </div>
+                  </div>
+               </div>
+
+               <div class="pm-top-2 t-mar-25">
+
+                  <div class="user-card">
+                     <div class="user-card-top">
+                        <div class="card-title">
+                           <h3>About</h3>
+   
+                        </div>
+                     </div>
+                     <div class="user-card-body t-pad-10">
+                        <p>{{ context.user.bio }}</p>
+                     </div>
+                     <div class="user-card-footer t-pad-25">
+                        <em>@{{ context.user.username }} said</em>
+                     </div>
+                  </div>
+
+               </div>
+
+               <div class="pm-blogs t-mar-25">
+                  <div class="grid-wrapper-2-col">
+                     
+                     {% for blog in context.blogs %}
+                     <a href="/blog/{{ blog.id }}">
+                        <div class="blog-card">
+                           <div class="blog-img">
+                              <img src="{{ blog.img }}" alt="">
+                           </div>
+                           <div class="blog-text">
+                              <p class="blog-cat tb-pad-20">{{ blog.category }}</p>
+                              <h3>{{ blog.title | title | truncate(35, True) }}</h3>
+                              <p class="summary t-pad-25">
+                                 {{ blog.content | truncate(60, True) }}
+                              </p>
+                           </div>
+                        </div>
+                     </a>
+                     {% endfor %}
+                  </div>
+               </div>
+
+            </div>
+
+            <div class="pm-right-wrapper">
+               
+               <div class="info-card b-mar-25">
+                  <h3>Skills</h3>
+                  <div class="info-items t-pad-10">
+                     {% for skill in context.user.skills %}
+                     <span>{{ skill }} | </span>
+                     {% endfor %}
+                  </div>
+               </div>
+               
+               <div class="info-card b-mar-25">
+                  <h3>Contact</h3>
+                  <div class="info-items t-pad-10">
+                     <ul>
+                        <!-- Website -->
+                        {% if context.user.website %} 
+                        <li class="info-item">
+                           <div class="svg-s">
+                              <img src="/static/images/icons/www.svg" alt="">
+                           </div>
+                           <a href="{{ context.user.website }}">
+                              <span class="l-pad-10 b-mar-7">Website</span> 
+                           </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if context.user.linkedin %} 
+                        <li class="info-item">
+                           <div class="svg-s">
+                              <img src="/static/images/icons/linkedin.svg" alt="">
+                           </div>
+                           <a href="{{ context.user.linkedin }}">
+                              <span class="l-pad-10 b-mar-7">Linkedin</span> 
+                           </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if context.user.twitter %}
+                        <li class="info-item">
+                           <div class="svg-s">
+                              <img src="/static/images/icons/twitter.svg" alt="">
+                           </div>
+                           <a href="{{ context.user.twitter }}">
+                              <span class="l-pad-10 b-mar-7">Twitter</span> 
+                           </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if context.user.instagram %}
+                        <li class="info-item">
+                           <div class="svg-s">
+                              <img src="/static/images/icons/instagram.svg" alt="">
+                           </div>
+                           <a href="{{ context.user.instagram }}">
+                              <span class="l-pad-10 b-mar-7">Instagram</span> 
+                           </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if context.user.youtube %}
+                        <li class="info-item">
+                           <div class="svg-s">
+                              <img src="/static/images/icons/instagram.svg" alt="">
+                           </div>
+                           <a href="{{ context.user.youtube }}">
+                              <span class="l-pad-10 b-mar-7">Youtube</span> 
+                           </a>
+                        </li>
+                        {% endif %}
+                     </ul>
+                  </div>
+               </div>
+               
+            </div>
+
+         </div>
+         
+      </div>
+   </main>
+{% endblock %}
