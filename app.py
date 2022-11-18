@@ -157,14 +157,28 @@ class DbManager:
       return
 
 
-   def get_comments(self, blog_id, owner_id):
-      print(blog_id)
-      self.cur.execute("""
-         SELECT comments.id, user_id, blog_id, comment_id, content, users.username, users.avatar
-         FROM comments 
-         JOIN users ON users.id = comments.user_id
-         WHERE blog_id = %s;
-      """, (blog_id,))
+   # def get_user_comment(self, owner_id, blog_id=None, comment_id=None):
+   #    ...
+
+
+   def get_comments(self, owner_id, blog_id=None, comment_id=None):
+      if blog_id:
+         self.cur.execute("""
+            SELECT comments.id, user_id, blog_id, comment_id, content, users.username, users.avatar
+            FROM comments 
+            JOIN users ON users.id = comments.user_id
+            WHERE blog_id = %s
+            ORDER BY comments.created_at DESC;
+         """, (blog_id,))
+      else:
+         self.cur.execute("""
+            SELECT comments.id, user_id, blog_id, comment_id, content, users.username, users.avatar
+            FROM comments 
+            JOIN users ON users.id = comments.user_id
+            WHERE comment_id = %s
+            ORDER BY comments.created_at DESC;
+         """, (comment_id,))
+
       comments_raw = self.cur.fetchall()
       keys = ["id", "user_id", "blog_id", "comment_id", "content", "username", "avatar"]
       comments = [ { keys[i]:v for i,v in enumerate(row) } for row in comments_raw]
@@ -409,8 +423,27 @@ class DbManager:
 
 
    def create_comment(self, data):
-      print("Start creating comment!")
-      return
+      owner_id, blog_id, comment_id, content = data.get('owner_id'), data.get('blog_id'), data.get('comment_id'), data.get('content')
+
+      self.cur.execute("""
+         BEGIN;
+         INSERT INTO comments (content, user_id, blog_id, comment_id)
+         VALUES (%s, %s, %s, %s);
+         COMMIT;
+
+         SELECT id FROM comments WHERE user_id = %s ORDER BY created_at DESC LIMIT 1;
+      """, (content, owner_id, blog_id, comment_id, owner_id,))
+      
+      comment_id = self.cur.fetchone()[0]
+      if (blog_id):
+         comment = self.get_comments(owner_id=data.get('owner_id'), blog_id=blog_id)
+      else:
+         comment = self.get_comments(owner_id=data.get('owner_id'), comment_id=comment_id)
+
+      print(f"Comment: {comment}")
+      return comment[0]
+
+         
 
 
    def close_cur_conn(self):
@@ -437,8 +470,7 @@ class UserManager:
 
       if user:
          is_valid = check_password_hash(user[2], password=password)
-         if is_valid: # TODO: Authenticate user
-            # print("login user...")
+         if is_valid:
             return user
       return None
 
@@ -773,10 +805,10 @@ def update_blog(id, owner=None):
 def get_blogs_comments(id, owner=None):
    blog_id = id
    manager = DbManager()
-   comments = manager.get_comments(blog_id, owner['id'])
+   comments = manager.get_comments(owner['id'], blog_id)
    manager.close_cur_conn()
    print(comments)
-   return jsonify({"comments": comments})
+   return jsonify(comments)
 
 
 # LIKES
@@ -828,14 +860,11 @@ def dislike_comment(id, owner=None):
 def create_comment(owner=None):
    manager = DbManager()
    data = json.loads(request.data)
-   data['id'] = owner['id']
-   print(f'body: {data}')
+   data['owner_id'] = owner['id']
    comment = manager.create_comment(data)
-   print(f'comment returned: {comment}')
-   # blog_id = blog[0]
    manager.close_cur_conn()
 
-   return jsonify({"message": "successful!"})
+   return jsonify(comment)
 
 # Run App
 if __name__ == "__main__":
