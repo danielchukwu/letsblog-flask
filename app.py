@@ -157,8 +157,15 @@ class DbManager:
       return
 
 
-   # def get_user_comment(self, owner_id, blog_id=None, comment_id=None):
-   #    ...
+   def add_sub_comments_count(self, comments_list):
+      for comment in comments_list:
+         self.cur.execute("""
+            SELECT COUNT(*)
+            FROM comments
+            WHERE comments.comment_id = %s;
+         """, (comment['id'],))
+
+         comment['sub_comments_count'] = self.cur.fetchone()[0];      
 
 
    def get_comments(self, owner_id, blog_id=None, comment_id=None):
@@ -185,6 +192,7 @@ class DbManager:
 
       self.add_comments_likes(comments)
       self.add_owner_liked_comment(comments, owner_id)
+      self.add_sub_comments_count(comments)
 
       return comments
 
@@ -800,12 +808,23 @@ def update_blog(id, owner=None):
    return jsonify({"id": id})
 
 
-@app.route("/api/blogs/comments/<id>", methods=["GET"])
+@app.route("/api/blogs/<id>/comments", methods=["GET"])
 @token_required
 def get_blogs_comments(id, owner=None):
    blog_id = id
    manager = DbManager()
    comments = manager.get_comments(owner['id'], blog_id)
+   manager.close_cur_conn()
+   print(comments)
+   return jsonify(comments)
+
+
+@app.route("/api/comments/<id>/comments", methods=["GET"])
+@token_required
+def get_comments_comments(id, owner=None):
+   comment_id = id
+   manager = DbManager()
+   comments = manager.get_comments(owner['id'], comment_id=comment_id)
    manager.close_cur_conn()
    print(comments)
    return jsonify(comments)
