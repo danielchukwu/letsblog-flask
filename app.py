@@ -401,30 +401,30 @@ class DbManager:
             if column == 'blog_id':   # For Blogs
                self.cur.execute("""
                   BEGIN;
-                  UPDATE likes SET is_like = %s WHERE blog_id = %s;
+                  UPDATE likes SET is_like = %s WHERE (blog_id = %s AND user_id = %s);
                   COMMIT;
-               """, (is_like, an_id))
+               """, (is_like, an_id, user_id))
             else:                     # For Comments
                self.cur.execute("""
                   BEGIN;
-                  UPDATE likes SET is_like = %s WHERE comment_id = %s;
+                  UPDATE likes SET is_like = %s WHERE (comment_id = %s AND user_id = %s);
                   COMMIT;
-               """, (is_like, an_id))
+               """, (is_like, an_id, user_id))
 
          else:
             # if user chose to re-like or re-dislike which means remove like or dislike, then remove
             if column == 'blog_id':     # For Blogs
                self.cur.execute("""
                   BEGIN;
-                  UPDATE likes SET is_like = %s WHERE blog_id = %s;
+                  UPDATE likes SET is_like = %s WHERE (blog_id = %s AND user_id = %s);
                   COMMIT;
-               """, (None, an_id))
+               """, (None, an_id, user_id))
             else:                       # For Comments
                self.cur.execute("""
                   BEGIN;
-                  UPDATE likes SET is_like = %s WHERE comment_id = %s;
+                  UPDATE likes SET is_like = %s WHERE (comment_id = %s AND user_id = %s);
                   COMMIT;
-               """, (None, an_id))
+               """, (None, an_id, user_id))
 
       return
 
