@@ -1,0 +1,35 @@
+Thursday 17th November
+
+Objectives For Today
+
+complete Comment design (input, like and dislike icon, sub comments)  ✅
+Implement Commenting (No comments if None exists)
+ - show comments ✅
+ - implement likes migration ✅
+ - show likes ✅
+ - Implement likes for blogs ✅ (frontend && backend ✅)
+ - Implement likes for comments ✅ (frontend && backend ✅)
+
+
+Thursday 18th November
+
+Objectives For Today
+
+Implement Commenting ✅
+Implement Viewing Sub Comments ✅
+Implement Replying to comments  ✅
+
+
+Cleanups
+- Fix owner_id and id confusion
+
+-------------------------------------------------------
+Monday 21st November
+
+Design comment buttons ✅
+Add comment buttons to create comment in react ✅
+Add comment btn on sub comments ✅
+Implement Commenting on sub comments ✅
+Implement Sub comments update ✅
+Implement Replies count update ✅
+Fix constraint
