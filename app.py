@@ -130,9 +130,6 @@ class DbManager:
          """, (comment['id'], owner_id))
 
          comment['disliked'] = True if self.cur.fetchone() else False 
-         
-         print('LIKES and DISLIKES')
-         print(comment['liked'], comment['disliked'])
       
       return
 
@@ -178,6 +175,8 @@ class DbManager:
             ORDER BY comments.created_at DESC;
          """, (blog_id,))
       else:
+         print('get comments on Comments')
+         print(comment_id)
          self.cur.execute("""
             SELECT comments.id, user_id, blog_id, comment_id, content, users.username, users.avatar
             FROM comments 
@@ -439,19 +438,24 @@ class DbManager:
          VALUES (%s, %s, %s, %s);
          COMMIT;
 
-         SELECT id FROM comments WHERE user_id = %s ORDER BY created_at DESC LIMIT 1;
+         SELECT comments.id, user_id, blog_id, comment_id, content, users.username, users.avatar
+         FROM comments 
+         JOIN users ON users.id = comments.user_id
+         WHERE users.id = %s
+         ORDER BY comments.created_at DESC
+         LIMIT 1;
       """, (content, owner_id, blog_id, comment_id, owner_id,))
       
-      comment_id = self.cur.fetchone()[0]
-      if (blog_id):
-         comment = self.get_comments(owner_id=data.get('owner_id'), blog_id=blog_id)
-      else:
-         comment = self.get_comments(owner_id=data.get('owner_id'), comment_id=comment_id)
+      comments_raw = self.cur.fetchall()
+      keys = ["id", "user_id", "blog_id", "comment_id", "content", "username", "avatar"]
+      comments = [ { keys[i]:v for i,v in enumerate(row) } for row in comments_raw]
 
-      print(f"Comment: {comment}")
-      return comment[0]
+      self.add_comments_likes(comments)
+      self.add_owner_liked_comment(comments, owner_id)
+      self.add_sub_comments_count(comments)
 
-         
+      print(f"Comment: {comments}")
+      return comments[0]
 
 
    def close_cur_conn(self):
