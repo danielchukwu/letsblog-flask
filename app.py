@@ -87,17 +87,81 @@ class DbManager:
       return blog
 
 
-   def get_user(self, id):
+   def follow(self, data):
+      if (data['follow']):
+         self.cur.execute("""
+            BEGIN;
+            INSERT INTO followers (follower_id, leader_id)
+            VALUES (%s, %s);
+            COMMIT;
+         """, (data['owner_id'], data['leader_id']))
+      else:
+         self.cur.execute("""
+            BEGIN;
+            DELETE FROM followers
+            WHERE (follower_id = %s AND leader_id = %s);
+            COMMIT;
+         """, (data['owner_id'], data['leader_id']))
+
+      return
+
+
+   def is_following(self, user_id, owner_id):
+      self.cur.execute("""
+         SELECT *
+         FROM followers
+         WHERE (follower_id = %s AND leader_id = %s);
+      """, (owner_id, user_id,))
+      following_row = self.cur.fetchone()
+      if following_row:
+         return True
+      else:
+         return False
+
+   
+   def get_following_count(self, user_id):
+      self.cur.execute("""
+         SELECT COUNT(*)
+         FROM followers
+         WHERE follower_id = %s;
+      """, (user_id,))
+      following_count_row = self.cur.fetchone()
+      print(f"Following count: {following_count_row}")
+      if following_count_row:
+         return following_count_row[0]
+      else:
+         return 0;
+
+   
+   def get_followers_count(self, user_id):
+      self.cur.execute("""
+         SELECT COUNT(*)
+         FROM followers
+         WHERE leader_id = %s;
+      """, (user_id,))
+      followers_count_row = self.cur.fetchone()
+      print(f"Followers count: {followers_count_row}")
+      if followers_count_row:
+         return followers_count_row[0]
+      else:
+         return 0;
+
+
+   def get_user(self, user_id, owner_id = None):
       self.cur.execute("""
          SELECT id, name, username, email, avatar, cover, bio, location, website, linkedin, facebook, twitter, instagram, youtube, created_at, updated_at 
          FROM users WHERE id = %s
-      """, (id,))
+      """, (user_id,))
       user_row = self.cur.fetchone()
       keys = ["id", "name", "username", "email", "avatar", "cover", "bio", "location", "website", "linkedin", "facebook", "twitter", "instagram", "youtube", "created_at", "updated_at"]
       user = { keys[i]:v for i,v in enumerate(user_row) }
-      user["skills"] = self.get_skills(id)
-      user["occupation"] = self.get_occupation(id)
-      user["company"] = self.get_company(id)
+      user["skills"] = self.get_skills(user_id)
+      user["occupation"] = self.get_occupation(user_id)
+      user["company"] = self.get_company(user_id)
+      user["following_count"] = self.get_following_count(user_id)
+      user["followers_count"] = self.get_followers_count(user_id)
+      if (owner_id):
+         user["following"] = self.is_following(user_id, owner_id)
 
       return user
 
@@ -645,7 +709,7 @@ def token_required(f):
       if token:
          info = jwt.decode(token, key=os.getenv('FLASK_APP_SECRET'), algorithms=["HS256"])
          db = DbManager()
-         user = db.get_user(id=info['user_id'])
+         user = db.get_user(user_id=info['user_id'])
          db.close_cur_conn()
       else:
          if f.__name__ not in OPEN_ROUTES:
@@ -679,7 +743,7 @@ def index(owner=None):
    return jsonify(data)
 
 
-@app.route("/api/", methods=['GET'])
+@app.route("/api/users/me", methods=['GET'])
 @token_required
 def get_owner(owner=None):
    return jsonify({'owner': owner})
@@ -711,7 +775,7 @@ def profile(id, owner=None):
    # print(f"User Id: {id}")
    if request.method == "GET":
       db = DbManager()
-      user = db.get_user(id)
+      user = db.get_user(id, owner['id'])
       blogs = db.get_user_blogs(id)
       db.close_cur_conn()
       data = {"user": user, "blogs": blogs, "owner":owner}
@@ -888,6 +952,22 @@ def create_comment(owner=None):
    manager.close_cur_conn()
 
    return jsonify(comment)
+
+
+# Follow
+@app.route("/api/users/follow", methods=["POST"])
+@token_required
+def follow(owner=None):
+   manager = DbManager()
+   data = json.loads(request.data)
+   data['owner_id'] = owner['id']
+   # print(data)
+   manager.follow(data)
+   manager.close_cur_conn()
+
+   return jsonify({"message": 'successful!'})
+
+
 
 # Run App
 if __name__ == "__main__":
