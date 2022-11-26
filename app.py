@@ -14,7 +14,7 @@ import uuid
 load_dotenv()  # take environment variables from .env.
 
 
-from utils import *
+import utils
 from flask_cors import CORS, cross_origin
 
 ALLOWED_URLS = ["http://localhost:3000"]
@@ -216,40 +216,65 @@ class DbManager:
 
       # Tree Structure to be returned to the frontend
       # seen
-      # - today -> list()
-      # - yesterday -> list()
-      # - this week -> list()
-      # - this month -> list()
-      # - this year -> list()
-      # - old -> list()
+      # - today -> [[], [], ...]
+      # - yesterday -> [[], [], ...]
+      # - this week -> [[], [], ...]
+      # - this month -> [[], [], ...]
+      # - this year -> [[], [], ...]
+      # - old -> [[], [], ...]
       unseen = {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
       seen =   {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
+      notifications = {}
 
       # Get Follow Notifications
-      notifications = self.get_notification_of_type(owner_id, 'follow', unseen, seen)
+      follows = self.get_notification_of_type(owner_id, 'follow', unseen, seen)
+      # Get liked_blog  Notifications
+      liked_blogs = self.get_notification_of_type(owner_id, 'liked_blog', unseen, seen)
 
-      return notifications
+      print("\n\n\n")
+      print(f"follows: {follows}")
+      print(f"liked_blogs: {liked_blogs}")
+
+      return {'unseen': unseen, 'seen': seen}
       
 
    def get_notification_of_type(self, owner_id, type, unseen, seen):
+      print(f'unseen: {unseen}')
+      print()
+      print(f'seen: {seen}')
+      # Junior_id will always be a user_id
+      # Senior_id
       self.cur.execute("""
-         SELECT n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type, n.created_at, s.avatar, s.username
-         FROM notifications as n JOIN users as s ON s.id = n.junior_id 
+         SELECT n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type, n.created_at, s.avatar, s.username, b.img
+         FROM notifications as n 
+         JOIN users as s ON s.id = n.junior_id 
+         JOIN blogs as b ON b.id = n.senior_id
          WHERE (leader_id = %s AND type = %s)
          ORDER BY n.created_at DESC;
       """, (owner_id, type))
       notifications_raw = self.cur.fetchall()
-      keys = ['id', 'leader_id', 'junior_id', 'senior_id', 'group_id', 'seen', 'type', 'created_at', 'avatar', 'username']
+      keys = ['id', 'leader_id', 'junior_id', 'senior_id', 'group_id', 'seen', 'type', 'created_at', 'avatar', 'username', 'blog_img']
       records = [{keys[i]: v  for i,v in enumerate(row)} for row in notifications_raw]
       
       # Generate a random uuid to group unseen notifications 
       # (for a particular notification type that is) 
       group_id = str(uuid.uuid4())
-      seen_group_ids = {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
+
+      # Use this structure to group comments that are alike
+      seen_ids = {'today': {}, 'yesterday': {}, 'this week': {}, 'this month': {}, 'this year': {}, 'old': {}}
+      unseen_ids = {'today': {}, 'yesterday': {}, 'this week': {}, 'this month': {}, 'this year': {}, 'old': {}}
+
       # Add Section and Time Ago
-      for i, record in enumerate(records):
-         record['group_id'] = group_id
-         add_section_and_timeago(record, seen, unseen, seen_group_ids, i)
+      for record in records:
+         if record['group_id'] == None:
+            record['group_id'] = group_id
+         utils.group_record(record, seen, unseen, seen_ids, unseen_ids)
+      # print(f'Seen: {seen}')
+      # print()
+      # print(f'UnSeen: {unseen}')
+      # print('\n')
+      # print(f'Seen Length: {len(seen.get("today")[0])}')
+      # print(f'UnSeen Length: {len(unseen.get("today")[0])}')
 
 
       # Insert group id to records in database
@@ -259,7 +284,7 @@ class DbManager:
          COMMIT;
       """, (group_id, owner_id, type, False,))
       
-      # Set all follow records to seen
+      # Set all notification records fetched to seen
       self.update_notifications_to_seen(owner_id, type)
       # print(data)
 
@@ -685,11 +710,11 @@ class UserManager:
       password_hash = generate_password_hash(password)
 
       manager = DbManager()
-      invalid_fields = check_username_email(manager, username, email)
+      invalid_fields = utils.check_username_email(manager, username, email)
       manager.close_cur_conn()
 
       # Check Password
-      is_valid_password(password, invalid_fields)
+      utils.is_valid_password(password, invalid_fields)
 
       # print(f'Invalid Fields: ${invalid_fields}')
       if len(invalid_fields) == 0:
