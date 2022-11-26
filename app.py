@@ -9,6 +9,7 @@ import datetime
 from dotenv import load_dotenv
 import info
 import json
+import uuid
 
 load_dotenv()  # take environment variables from .env.
 
@@ -147,6 +148,7 @@ class DbManager:
          return 0;
 
 
+   # Grab user with all its major data
    def get_user(self, user_id, owner_id = None):
       self.cur.execute("""
          SELECT id, name, username, email, avatar, cover, bio, location, website, linkedin, facebook, twitter, instagram, youtube, created_at, updated_at 
@@ -164,6 +166,120 @@ class DbManager:
          user["following"] = self.is_following(user_id, owner_id)
 
       return user
+   
+
+   # Grab users followers or following list of users
+   def get_follow(self, user_id, owner_id, type):
+      if type == 'following':
+         self.cur.execute("""
+            SELECT leader_id FROM followers WHERE follower_id = %s ORDER BY created_at DESC;
+         """, (user_id,))
+      elif type == 'followers':
+         self.cur.execute("""
+            SELECT follower_id FROM followers WHERE leader_id = %s ORDER BY created_at DESC;
+         """, (user_id,))
+
+      follow_rows = self.cur.fetchall();
+      users_list = []
+      for record in follow_rows:
+         # print(record[0])
+         user = self.get_user_light(record[0], owner_id)
+         users_list.append(user)
+
+      return users_list
+
+
+   # Grab user for mainly frontend following/followers page. (Grabs only name, username, avatar)
+   def get_user_light(self, user_id, owner_id = None):
+      self.cur.execute("""
+         SELECT id, name, username, avatar
+         FROM users WHERE id = %s
+      """, (user_id,))
+      user_row = self.cur.fetchone()
+      print(f'user_row: {user_row}')
+      keys = ["id", "name", "username", "avatar"]
+      user = { keys[i]:v for i,v in enumerate(user_row) }
+      if (owner_id):
+         user["following"] = self.is_following(user_id, owner_id)
+
+      return user
+
+
+   # Get Owners Notifications
+   def get_notifications(self, owner_id):
+      # Get 
+      # follow
+      # liked         blog
+      # liked       comment
+      # comment       blog
+      # comment     comment
+
+      # Tree Structure to be returned to the frontend
+      # seen
+      # - today -> list()
+      # - yesterday -> list()
+      # - this week -> list()
+      # - this month -> list()
+      # - this year -> list()
+      # - old -> list()
+      unseen = {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
+      seen =   {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
+
+      # Get Follow Notifications
+      notifications = self.get_notification_of_type(owner_id, 'follow', unseen, seen)
+
+      return notifications
+      
+
+   def get_notification_of_type(self, owner_id, type, unseen, seen):
+      self.cur.execute("""
+         SELECT n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type, n.created_at, s.avatar, s.username
+         FROM notifications as n JOIN users as s ON s.id = n.junior_id 
+         WHERE (leader_id = %s AND type = %s)
+         ORDER BY n.created_at DESC;
+      """, (owner_id, type))
+      notifications_raw = self.cur.fetchall()
+      keys = ['id', 'leader_id', 'junior_id', 'senior_id', 'group_id', 'seen', 'type', 'created_at', 'avatar', 'username']
+      records = [{keys[i]: v  for i,v in enumerate(row)} for row in notifications_raw]
+      
+      # Generate a random uuid to group unseen notifications 
+      # (for a particular notification type that is) 
+      group_id = str(uuid.uuid4())
+      seen_group_ids = {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
+      # Add Section and Time Ago
+      for i, record in enumerate(records):
+         record['group_id'] = group_id
+         add_section_and_timeago(record, seen, unseen, seen_group_ids, i)
+
+
+      # Insert group id to records in database
+      self.cur.execute("""
+         BEGIN;
+         UPDATE notifications SET group_id = %s WHERE (leader_id = %s AND type = %s and seen = %s); 
+         COMMIT;
+      """, (group_id, owner_id, type, False,))
+      
+      # Set all follow records to seen
+      self.update_notifications_to_seen(owner_id, type)
+      # print(data)
+
+      # return {'unseen': unseen, 'seen': seen}
+      return {'seen': seen, 'unseen': unseen}
+
+
+
+   # Update fetched notifications to seen
+   def update_notifications_to_seen(self, owner_id, type):
+      # self.cur.execute("""
+      #    BEGIN;
+      #    UPDATE notifications
+      #    SET seen = true
+      #    WHERE (leader_id = %s AND type = %s);
+      #    COMMIT;
+      # """, (owner_id, type))
+      ...
+      return
+
 
 
    def add_comments_likes(self, comments_list):
@@ -739,24 +855,14 @@ def index(owner=None):
    db = DbManager()
    blogs = db.get_blogs()
    db.close_cur_conn()
-   data = {'blogs': blogs, 'owner': owner}
-   return jsonify(data)
+   # data = {blogs}
+   return jsonify(blogs)
 
 
 @app.route("/api/users/me", methods=['GET'])
 @token_required
 def get_owner(owner=None):
-   return jsonify({'owner': owner})
-
-
-@app.route("/api/owners/blogs")
-@token_required
-def owners_blogs(owner=None):
-   db = DbManager()
-   blogs = db.get_user_blogs(owner["id"])
-   db.close_cur_conn()
-   data = {'blogs': blogs, 'owner': owner}
-   return jsonify(data)
+   return jsonify(owner)
 
 
 @app.route("/api/users/<id>/blogs")
@@ -765,8 +871,7 @@ def users_blogs(id, owner=None):
    db = DbManager()
    blogs = db.get_user_blogs(id)
    db.close_cur_conn()
-   data = {'blogs': blogs, 'owner': owner}
-   return jsonify(data)
+   return jsonify(blogs)
 
 
 @app.route("/api/users/<id>")
@@ -776,10 +881,8 @@ def profile(id, owner=None):
    if request.method == "GET":
       db = DbManager()
       user = db.get_user(id, owner['id'])
-      blogs = db.get_user_blogs(id)
       db.close_cur_conn()
-      data = {"user": user, "blogs": blogs, "owner":owner}
-      return jsonify(data)
+      return jsonify(user)
    else:
       return jsonify("Backend Response: successfully arrived.")
 
@@ -836,8 +939,8 @@ def blog(id, owner=None):
    blog = db.get_blog(id, owner['id'])
    # liked = db.is_liked('blog_id', owner['id'], blog['id'])
    db.close_cur_conn()
-   data = {'blog': blog, 'owner': owner}
-   return jsonify(data)
+   # data = {'blog': blog, 'owner': owner}
+   return jsonify(blog)
 
 
 @app.route("/api/blogs", methods=["POST"])
@@ -906,7 +1009,7 @@ def like_blog(id, owner=None):
    manager = DbManager()
    manager.create_like('blog_id', owner['id'], blog_id, True)
    manager.close_cur_conn()
-   return jsonify({"message": 'successful!'})
+   return jsonify({"message": 'successful'})
 
 
 @app.route("/api/blogs/<id>/dislikes", methods=["GET"])
@@ -916,7 +1019,7 @@ def dislike_blog(id, owner=None):
    manager = DbManager()
    manager.create_like('blog_id', owner['id'], blog_id, False)
    manager.close_cur_conn()
-   return jsonify({"message": 'successful!'})
+   return jsonify({"message": 'successful'})
 
 
 @app.route("/api/comments/<id>/likes", methods=["GET"])
@@ -927,7 +1030,7 @@ def like_comment(id, owner=None):
    manager = DbManager()
    manager.create_like('comment_id', owner['id'], comment_id, True)
    manager.close_cur_conn()
-   return jsonify({"message": 'successful!'})
+   return jsonify({"message": 'successful'})
 
 
 @app.route("/api/comments/<id>/dislikes", methods=["GET"])
@@ -938,7 +1041,7 @@ def dislike_comment(id, owner=None):
    manager = DbManager()
    manager.create_like('comment_id', owner['id'], comment_id, False)
    manager.close_cur_conn()
-   return jsonify({"message": 'successful!'})
+   return jsonify({"message": 'successful'})
 
 
 # Comments
@@ -965,7 +1068,39 @@ def follow(owner=None):
    manager.follow(data)
    manager.close_cur_conn()
 
-   return jsonify({"message": 'successful!'})
+   return jsonify({"message": 'successful'})
+
+
+@app.route("/api/users/<id>/following", methods=["GET"])
+@token_required
+def get_following(id, owner=None):
+   manager = DbManager()
+   following_list = manager.get_follow(id, owner['id'], type="following")
+   print(following_list)
+   manager.close_cur_conn()
+
+   return jsonify(following_list)
+
+
+@app.route("/api/users/<id>/followers", methods=["GET"])
+@token_required
+def get_followers(id, owner=None):
+   manager = DbManager()
+   followers_list = manager.get_follow(id, owner['id'], type="followers")
+   manager.close_cur_conn()
+
+   return jsonify(followers_list)
+
+
+# Notifications
+@app.route("/api/users/notifications", methods=["GET"])
+@token_required
+def get_notifications(owner=None):
+   manager = DbManager()
+   notifications = manager.get_notifications(owner['id'])
+   manager.close_cur_conn()
+
+   return jsonify(notifications)
 
 
 
