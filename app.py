@@ -205,9 +205,24 @@ class DbManager:
       return user
 
 
+   # Create notification
+   def create_notification(self, owner_id, junior_id, senior_id,  type):
+      # n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type
+      try:
+         self.cur.execute("""
+            BEGIN;
+            INSERT INTO notifications (leader_id, junior_id, senior_id, seen, type)
+            VALUES (%s, %s, %s, %s, %s);
+            COMMIT;
+         """, (owner_id, junior_id, senior_id, False, type))
+      except:
+         print("Notification already exists!")
+      print('Notification successfully created!')
+
+
    # Get Owners Notifications
    def get_notifications(self, owner_id):
-      # Get 
+      # Notification Types
       # follow
       # liked         blog
       # liked       comment
@@ -222,28 +237,32 @@ class DbManager:
       # - this month -> [[], [], ...]
       # - this year -> [[], [], ...]
       # - old -> [[], [], ...]
-      unseen = {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
-      seen =   {'today': [], 'yesterday': [], 'this week': [], 'this month': [], 'this year': [], 'old': []}
+      # unseen
+      # - ... (same as the above)
+      unseen = {'today': [], 'yesterday': [], 'this_week': [], 'this_month': [], 'this_year': [], 'old': []}
+      seen =   {'today': [], 'yesterday': [], 'this_week': [], 'this_month': [], 'this_year': [], 'old': []}
       notifications = {}
 
       # Get Follow Notifications
       follows = self.get_notification_of_type(owner_id, 'follow', unseen, seen)
       # Get liked_blog  Notifications
       liked_blogs = self.get_notification_of_type(owner_id, 'liked_blog', unseen, seen)
+      # Get liked_comment  Notifications
+      liked_comments = self.get_notification_of_type(owner_id, 'liked_comment', unseen, seen)
+      # Get commented_blog  Notifications
+      commented_blogs = self.get_notification_of_type(owner_id, 'commented_blog', unseen, seen)
+      # Get commented_comment  Notifications
+      commented_comment = self.get_notification_of_type(owner_id, 'commented_comment', unseen, seen)
 
       print("\n\n\n")
-      print(f"follows: {follows}")
-      print(f"liked_blogs: {liked_blogs}")
+      print({'unseen': unseen, 'seen': seen})
 
       return {'unseen': unseen, 'seen': seen}
       
 
    def get_notification_of_type(self, owner_id, type, unseen, seen):
-      print(f'unseen: {unseen}')
-      print()
-      print(f'seen: {seen}')
       # Junior_id will always be a user_id
-      # Senior_id
+      # Senior_id will either be a blog_id, comment_id or  user_id
       self.cur.execute("""
          SELECT n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type, n.created_at, s.avatar, s.username, b.img
          FROM notifications as n 
@@ -255,26 +274,22 @@ class DbManager:
       notifications_raw = self.cur.fetchall()
       keys = ['id', 'leader_id', 'junior_id', 'senior_id', 'group_id', 'seen', 'type', 'created_at', 'avatar', 'username', 'blog_img']
       records = [{keys[i]: v  for i,v in enumerate(row)} for row in notifications_raw]
+      print('\nNotifications Raw: \n')
+      print(notifications_raw)
       
       # Generate a random uuid to group unseen notifications 
       # (for a particular notification type that is) 
       group_id = str(uuid.uuid4())
 
       # Use this structure to group comments that are alike
-      seen_ids = {'today': {}, 'yesterday': {}, 'this week': {}, 'this month': {}, 'this year': {}, 'old': {}}
-      unseen_ids = {'today': {}, 'yesterday': {}, 'this week': {}, 'this month': {}, 'this year': {}, 'old': {}}
+      seen_ids = {'today': {}, 'yesterday': {}, 'this_week': {}, 'this_month': {}, 'this_year': {}, 'old': {}}
+      unseen_ids = {'today': {}, 'yesterday': {}, 'this_week': {}, 'this_month': {}, 'this_year': {}, 'old': {}}
 
       # Add Section and Time Ago
       for record in records:
          if record['group_id'] == None:
             record['group_id'] = group_id
          utils.group_record(record, seen, unseen, seen_ids, unseen_ids)
-      # print(f'Seen: {seen}')
-      # print()
-      # print(f'UnSeen: {unseen}')
-      # print('\n')
-      # print(f'Seen Length: {len(seen.get("today")[0])}')
-      # print(f'UnSeen Length: {len(unseen.get("today")[0])}')
 
 
       # Insert group id to records in database
@@ -286,11 +301,9 @@ class DbManager:
       
       # Set all notification records fetched to seen
       self.update_notifications_to_seen(owner_id, type)
-      # print(data)
 
       # return {'unseen': unseen, 'seen': seen}
       return {'seen': seen, 'unseen': unseen}
-
 
 
    # Update fetched notifications to seen
@@ -1075,10 +1088,16 @@ def dislike_comment(id, owner=None):
 def create_comment(owner=None):
    manager = DbManager()
    data = json.loads(request.data)
+   print("comment: ")
+   print(data)
    data['owner_id'] = owner['id']
    comment = manager.create_comment(data)
-   manager.close_cur_conn()
+   if (data.get('blog_id')):
+      manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=data.get('blog_id'), type='commented_blog')
+   else:
+      manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=data.get('comment_id'), type='commented_comment')
 
+   manager.close_cur_conn()
    return jsonify(comment)
 
 
@@ -1089,8 +1108,8 @@ def follow(owner=None):
    manager = DbManager()
    data = json.loads(request.data)
    data['owner_id'] = owner['id']
-   # print(data)
    manager.follow(data)
+   manager.create_notification(data['leader_id'], owner['id'], data['leader_id'], 'follow')
    manager.close_cur_conn()
 
    return jsonify({"message": 'successful'})
