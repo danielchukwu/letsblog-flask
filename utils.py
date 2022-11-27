@@ -111,7 +111,7 @@ def group_record(record: dict, seen: dict, unseen: dict, seen_ids: dict, unseen_
             if (current.day - date.day) == 1:
                # record['section'] = 'yesterday'
                record['ago'] = '1 day ago'
-               add_seen_unseen('yesterday ')
+               add_seen_unseen('yesterday')
             # Today
             elif current.day == date.day:
                # record['section'] = 'today'
@@ -129,19 +129,19 @@ def group_record(record: dict, seen: dict, unseen: dict, seen_ids: dict, unseen_
                # record['section'] = 'week'
                days_ago = current.day - date.day
                record['ago'] = f'{days_ago} days ago' if days_ago != 1 else f'{days_ago} day ago'
-               add_seen_unseen('this week')
+               add_seen_unseen('this_week')
          # This Month
          else:
             # record['section'] = 'month'
             weeks_ago = (current.day - date.day) // 7
             record['ago'] = f'{weeks_ago} weeks ago' if weeks_ago != 1 else f'{weeks_ago} week ago'
-            add_seen_unseen('this month')
+            add_seen_unseen('this_month')
       # This Year
       else:
          # record['section'] = 'year'
          months_ago = (current.month - date.month)
          record['ago'] = f'{months_ago} months ago' if months_ago != 1 else f'{months_ago} month ago'
-         add_seen_unseen('this year')
+         add_seen_unseen('this_year')
    # Old
    else:
       record['section'] = 'old'
