@@ -220,7 +220,8 @@ class DbManager:
       print('Notification successfully created!')
 
 
-   # Get Owners Notifications
+   # Get Owners Notifications all types 
+   # (follow, liked_blog, liked_comment, commented_)
    def get_notifications(self, owner_id):
       # Notification Types
       # follow
@@ -251,6 +252,7 @@ class DbManager:
       liked_comments = self.get_notification_of_type(owner_id, 'liked_comment', unseen, seen)
       # Get commented_blog  Notifications
       commented_blogs = self.get_notification_of_type(owner_id, 'commented_blog', unseen, seen)
+
       # Get commented_comment  Notifications
       commented_comment = self.get_notification_of_type(owner_id, 'commented_comment', unseen, seen)
 
@@ -260,21 +262,34 @@ class DbManager:
       return {'unseen': unseen, 'seen': seen}
       
 
+   # Get a particular type of notification
    def get_notification_of_type(self, owner_id, type, unseen, seen):
       # Junior_id will always be a user_id
       # Senior_id will either be a blog_id, comment_id or  user_id
-      self.cur.execute("""
-         SELECT n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type, n.created_at, s.avatar, s.username, b.img
-         FROM notifications as n 
-         JOIN users as s ON s.id = n.junior_id 
-         JOIN blogs as b ON b.id = n.senior_id
-         WHERE (leader_id = %s AND type = %s)
-         ORDER BY n.created_at DESC;
-      """, (owner_id, type))
+      if type == 'liked_blog' or type == 'commented_blog':
+         self.cur.execute("""
+            SELECT n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type, n.created_at, s.avatar, s.username, b.img
+            FROM notifications as n 
+            JOIN users as s ON s.id = n.junior_id 
+            JOIN blogs as b ON b.id = n.senior_id
+            WHERE (leader_id = %s AND type = %s)
+            ORDER BY n.created_at DESC;
+         """, (owner_id, type))
+         keys = ['id', 'leader_id', 'junior_id', 'senior_id', 'group_id', 'seen', 'type', 'created_at', 'avatar', 'username', 'blog_img']
+      else:
+         # For type == 'liked_comment' or type == 'commented_comment' or type == 'follow'
+         self.cur.execute("""
+            SELECT n.id, n.leader_id, n.junior_id, n.senior_id, n.group_id, n.seen, n.type, n.created_at, s.avatar, s.username
+            FROM notifications as n 
+            JOIN users as s ON s.id = n.junior_id
+            WHERE (leader_id = %s AND type = %s)
+            ORDER BY n.created_at DESC;
+         """, (owner_id, type))
+         keys = ['id', 'leader_id', 'junior_id', 'senior_id', 'group_id', 'seen', 'type', 'created_at', 'avatar', 'username']
       notifications_raw = self.cur.fetchall()
-      keys = ['id', 'leader_id', 'junior_id', 'senior_id', 'group_id', 'seen', 'type', 'created_at', 'avatar', 'username', 'blog_img']
       records = [{keys[i]: v  for i,v in enumerate(row)} for row in notifications_raw]
-      print('\nNotifications Raw: \n')
+      print("notifications_raw: ")
+      print(f"owner_id: {owner_id}\ntype: {type}")
       print(notifications_raw)
       
       # Generate a random uuid to group unseen notifications 
@@ -306,18 +321,28 @@ class DbManager:
       return {'seen': seen, 'unseen': unseen}
 
 
+   # Grabs the unseen notifications count of a user (preferably the owner)
+   def get_unseen_notification_count(self, owner_id):
+      ...
+      self.cur.execute("""
+         SELECT COUNT(*) FROM notifications WHERE (leader_id = %s AND seen = %s);
+      """, (owner_id, False))
+      count_raw = self.cur.fetchone()
+      
+      return count_raw[0]
+
+
    # Update fetched notifications to seen
    def update_notifications_to_seen(self, owner_id, type):
-      # self.cur.execute("""
-      #    BEGIN;
-      #    UPDATE notifications
-      #    SET seen = true
-      #    WHERE (leader_id = %s AND type = %s);
-      #    COMMIT;
-      # """, (owner_id, type))
-      ...
-      return
-
+      self.cur.execute("""
+         BEGIN;
+         UPDATE notifications
+         SET seen = true
+         WHERE (leader_id = %s AND type = %s);
+         COMMIT;
+      """, (owner_id, type))
+      # ...
+      # return
 
 
    def add_comments_likes(self, comments_list):
@@ -467,15 +492,143 @@ class DbManager:
       else: return False
 
 
-   def update_user(self, user_id, data : dict()):
-      for key, value in data.items():
-         self.cur.execute(f"""
+   def update_user(self, user_id, data : dict(), type):
+      if type == 'main':
+         for key, value in data.items():
+            self.cur.execute(f"""
+            BEGIN;
+            UPDATE users SET {key} = %s WHERE id = {user_id};
+            COMMIT;
+            """, (value,))
+      elif type == 'others':
+         # update occupation
+         if data.get('occupation'):
+            self.add_occupation(user_id, data.get('occupation'))
+
+         # update company
+         if data.get('company'):
+            self.add_company(user_id, data.get('company'))
+         # remove skills
+         if len( data.get('removed_skills') ):
+            self.remove_skills(user_id, data.get('removed_skills'))
+         # skills
+         if len( data.get('skills') ):
+            self.add_skills(user_id, data.get('skills'))
+
+
+   def get_or_create_skill(self, skill):
+      self.cur.execute("SELECT * FROM skills WHERE title = %s", (skill,))
+      skill_row = self.cur.fetchone()
+      if skill_row != None:
+         # skill exists. return skill id
+         return skill_row[0]
+      else:
+         # create skill. and return skill id
+         self.cur.execute("""
          BEGIN;
-         UPDATE users SET {key} = %s WHERE id = {user_id};
+         INSERT INTO skills (title) VALUES (%s);
          COMMIT;
-         """, (value,))
+         """, (skill,))
+         return self.get_or_create_skill(skill)
+
+
+   def add_skills(self, user_id, skillList):
+      skill_ids = []
+      for skill in skillList:
+         # Get ids for all skills
+         skill_ids.append( self.get_or_create_skill(skill) )
+
+      # Create skills_users relationship
+      for skill_id in skill_ids:
+         try:
+            self.cur.execute("""
+               BEGIN;
+               INSERT INTO skills_users (skill_id, user_id)
+               VALUES (%s, %s);
+               COMMIT;
+            """, (skill_id, user_id,))
+         except:
+            continue
+
+
+   def remove_skills(self, user_id, skillList):
+      skill_ids = []
+      for skill in skillList:
+         # Get ids for all skills
+         skill_ids.append( self.get_or_create_skill(skill) )
+
+      # Create skills_users relationship
+      for skill_id in skill_ids:
+         self.cur.execute("""
+            BEGIN;
+            DELETE FROM skills_users
+            WHERE (skill_id = %s AND user_id = %s);
+            COMMIT;
+         """, (skill_id, user_id,))
+
+
+   def add_occupation(self, user_id, occupation):
+      # fetch occupation
+      self.cur.execute("SELECT * FROM occupations WHERE title = %s;", (occupation.lower(),))
+      occupation_row = self.cur.fetchone()
       
-      return True
+      if occupation_row:
+         # if occupation exists. 
+         # Create occupations_users relationship
+         occupation_id = occupation_row[0]
+         self.cur.execute("""
+            BEGIN;
+
+            DELETE FROM occupations_users WHERE user_id = %s;
+            
+            INSERT INTO occupations_users (occupation_id, user_id)
+            VALUES (%s, %s);
+            COMMIT;
+         """, (user_id, occupation_id, user_id,))
+      else:
+         # if occupation doesn't exist. Create it
+         self.cur.execute("""
+            BEGIN;
+            INSERT INTO occupations (title)
+            VALUES (%s);
+            COMMIT;
+         """, (occupation.lower(),))
+
+         # After creating occupation. Make Recursive call
+         # to create occupations_users relationship
+         self.add_occupation(user_id, occupation)
+
+
+   def add_company(self, user_id, company):
+      # fetch company
+      self.cur.execute("SELECT * FROM companies WHERE title = %s;", (company.lower(),))
+      company_row = self.cur.fetchone()
+      
+      if company_row:
+         # if company exists. 
+         # Create companies_users relationship
+         company_id = company_row[0]
+         self.cur.execute("""
+            BEGIN;
+
+            DELETE FROM companies_users WHERE user_id = %s;
+
+            INSERT INTO companies_users (company_id, user_id)
+            VALUES (%s, %s);
+            COMMIT;
+         """, (user_id, company_id, user_id,))
+      else:
+         # if company doesn't exist. Create it
+         self.cur.execute("""
+            BEGIN;
+            INSERT INTO companies (title)
+            VALUES (%s);
+            COMMIT;
+         """, (company.lower(),))
+
+         # After creating company. Make Recursive call
+         # to create companies_users relationship
+         self.add_company(user_id, company)
 
 
    def create_blog(self, data):
@@ -763,69 +916,63 @@ class UserManager:
 
 
    # for create_user
-   def add_occupation(self, user_id, occupation_title):
-      try:
-         # Get Occupation
-         self.cur.execute('SELECT * FROM occupations WHERE title = %s', (occupation_title,))
-         occupation = self.cur.fetchone()
-         occupation_id = occupation[0]
-      except:
-         # Create Occupation
+
+   def add_occupation(self, user_id, occupation):
+      # fetch occupation
+      self.cur.execute("SELECT * FROM occupations WHERE title = %s;", (occupation.lower(),))
+      occupation_row = self.cur.fetchone()
+      
+      if occupation_row:
+         # if occupation exists. 
+         # Create occupations_users relationship
+         occupation_id = occupation_row[0]
          self.cur.execute("""
             BEGIN;
-         
+            INSERT INTO occupations_users (occupation_id, user_id)
+            VALUES (%s, %s);
+            COMMIT;
+         """, (occupation_id, user_id,))
+      else:
+         # if occupation doesn't exist. Create it
+         self.cur.execute("""
+            BEGIN;
             INSERT INTO occupations (title)
             VALUES (%s);
-
             COMMIT;
-         """, (occupation_title,))
-         # Get occupation
-         self.cur.execute('SELECT * FROM occupations WHERE title = %s', (occupation_title,))
-         occupation = self.cur.fetchone()
-         occupation_id = occupation[0]
+         """, (occupation.lower(),))
 
-      # Create Relationship
-      self.cur.execute("""
-         BEGIN;
-
-         INSERT INTO occupations_users (occupation_id, user_id)
-         VALUES (%s, %s);
-
-         COMMIT;
-      """, (occupation_id, user_id))
+         # After creating occupation. Make Recursive call
+         # to create occupations_users relationship
+         self.add_occupation(user_id, occupation)
 
 
-   # for add_company
-   def add_company(self, user_id, company_title):
-      try:
-         # Get company
-         self.cur.execute('SELECT * FROM companies WHERE title = %s', (company_title,))
-         company = self.cur.fetchone()
-         company_id = company[0]
-      except:
-         # Create company
+   def add_company(self, user_id, company):
+      # fetch company
+      self.cur.execute("SELECT * FROM companies WHERE title = %s;", (company.lower(),))
+      company_row = self.cur.fetchone()
+      
+      if company_row:
+         # if company exists. 
+         # Create companies_users relationship
+         company_id = company_row[0]
          self.cur.execute("""
             BEGIN;
-         
+            INSERT INTO companies_users (company_id, user_id)
+            VALUES (%s, %s);
+            COMMIT;
+         """, (company_id, user_id,))
+      else:
+         # if company doesn't exist. Create it
+         self.cur.execute("""
+            BEGIN;
             INSERT INTO companies (title)
             VALUES (%s);
-
             COMMIT;
-         """, (company_title,))
-         # Get company
-         self.cur.execute('SELECT * FROM companies WHERE title = %s', (company_title,))
-         company = self.cur.fetchone()
-         company_id = company[0]
+         """, (company.lower(),))
 
-      # Create Relationship
-      self.cur.execute("""
-         BEGIN;
-
-         INSERT INTO companies_users (company_id, user_id)
-         VALUES (%s, %s);
-
-         COMMIT;
-      """, (company_id, user_id))
+         # After creating company. Make Recursive call
+         # to create companies_users relationship
+         self.add_company(user_id, company)
 
 
 # Token Decorator
@@ -900,6 +1047,9 @@ def index(owner=None):
 @app.route("/api/users/me", methods=['GET'])
 @token_required
 def get_owner(owner=None):
+   db = DbManager()
+   owner['notifications_count'] = db.get_unseen_notification_count(owner['id'])
+   db.close_cur_conn()
    return jsonify(owner)
 
 
@@ -930,17 +1080,29 @@ def update_profile(id, owner=None):
    manager = DbManager()
    data = json.loads(request.data)
    username, email = data.get("username"), data.get("email")
-   invalid_fields = check_username_email(manager, username, email)
+   invalid_fields = utils.check_username_email(manager, username, email)
 
    # If data is valid. Update data
    if len(invalid_fields) == 0:
-      manager.update_user(id, data)
+      manager.update_user(id, data, 'main')
       manager.close_cur_conn()
    else:
       manager.close_cur_conn()
       return jsonify({"invalid_fields" : invalid_fields})
 
    return jsonify({"message": "successful"})
+
+
+@app.route("/api/users/update", methods=["PUT"])
+@token_required
+def update_profile_2(owner=None):
+   manager = DbManager()
+   data = json.loads(request.data)
+   manager.update_user(owner['id'], data, 'others')
+   print(f'data: {data}')
+   manager.close_cur_conn()
+   
+   return {'message': 'successful'}
 
 
 # Authentication
@@ -1040,17 +1202,21 @@ def get_comments_comments(id, owner=None):
 
 
 # LIKES
-@app.route("/api/blogs/<id>/likes", methods=["GET"])
+@app.route("/api/blogs/<id>/likes", methods=["POST"])
 @token_required
 def like_blog(id, owner=None):
-   blog_id = id
    manager = DbManager()
-   manager.create_like('blog_id', owner['id'], blog_id, True)
+   data = json.loads(request.data)
+   print("liked: ")
+   print(data)
+   manager.create_like('blog_id', owner['id'], id, True)
+   if owner['id'] != data.get('user_id'):
+      manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=id, type='liked_blog')
    manager.close_cur_conn()
    return jsonify({"message": 'successful'})
 
 
-@app.route("/api/blogs/<id>/dislikes", methods=["GET"])
+@app.route("/api/blogs/<id>/dislikes", methods=["POST"])
 @token_required
 def dislike_blog(id, owner=None):
    blog_id = id
@@ -1060,21 +1226,25 @@ def dislike_blog(id, owner=None):
    return jsonify({"message": 'successful'})
 
 
-@app.route("/api/comments/<id>/likes", methods=["GET"])
+@app.route("/api/comments/<id>/likes", methods=["POST"])
 @token_required
 def like_comment(id, owner=None):
-   print('Like Comment....')
    comment_id = id
    manager = DbManager()
+   data = json.loads(request.data)
+   print('data')
+   print(data)
    manager.create_like('comment_id', owner['id'], comment_id, True)
+   if owner['id'] != data.get('user_id'):
+      manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=id, type='liked_comment')
    manager.close_cur_conn()
+
    return jsonify({"message": 'successful'})
 
 
-@app.route("/api/comments/<id>/dislikes", methods=["GET"])
+@app.route("/api/comments/<id>/dislikes", methods=["POST"])
 @token_required
 def dislike_comment(id, owner=None):
-   print('DisLike Comment....')
    comment_id = id
    manager = DbManager()
    manager.create_like('comment_id', owner['id'], comment_id, False)
@@ -1092,10 +1262,13 @@ def create_comment(owner=None):
    print(data)
    data['owner_id'] = owner['id']
    comment = manager.create_comment(data)
-   if (data.get('blog_id')):
-      manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=data.get('blog_id'), type='commented_blog')
-   else:
-      manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=data.get('comment_id'), type='commented_comment')
+   if owner['id'] != data.get('user_id'):
+      if (data.get('blog_id')):
+         # commented_blog
+         manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=data.get('blog_id'), type='commented_blog')
+      else:
+         # commented_comment
+         manager.create_notification(owner_id=data.get('user_id'), junior_id=owner['id'], senior_id=data.get('comment_id'), type='commented_comment')
 
    manager.close_cur_conn()
    return jsonify(comment)
