@@ -22,7 +22,7 @@ OPEN_ROUTES = ['index']  # Routes that don't require authentication
 DAYS_TOKEN_LAST = 1
 
 
-# Manage dabatabase related tasks
+# Manage database related tasks
 class DbManager:
 
    def __init__(self) -> None:
@@ -240,8 +240,8 @@ class DbManager:
       # - old -> [[], [], ...]
       # unseen
       # - ... (same as the above)
-      unseen = {'today': [], 'yesterday': [], 'this_week': [], 'this_month': [], 'this_year': [], 'old': []}
-      seen =   {'today': [], 'yesterday': [], 'this_week': [], 'this_month': [], 'this_year': [], 'old': []}
+      unseen = {'today': [], 'yesterday': [], 'this_week': [], 'this_month': [], 'last_month': [], 'this_year': [], 'old': []}
+      seen =   {'today': [], 'yesterday': [], 'this_week': [], 'this_month': [], 'last_month': [], 'this_year': [], 'old': []}
       notifications = {}
 
       # Get Follow Notifications
@@ -297,8 +297,8 @@ class DbManager:
       group_id = str(uuid.uuid4())
 
       # Use this structure to group comments that are alike
-      seen_ids = {'today': {}, 'yesterday': {}, 'this_week': {}, 'this_month': {}, 'this_year': {}, 'old': {}}
-      unseen_ids = {'today': {}, 'yesterday': {}, 'this_week': {}, 'this_month': {}, 'this_year': {}, 'old': {}}
+      seen_ids = {'today': {}, 'yesterday': {}, 'this_week': {}, 'this_month': {}, 'last_month': {}, 'this_year': {}, 'old': {}}
+      unseen_ids = {'today': {}, 'yesterday': {}, 'this_week': {}, 'this_month': {}, 'last_month': {}, 'this_year': {}, 'old': {}}
 
       # Add Section and Time Ago
       for record in records:
@@ -829,6 +829,23 @@ class DbManager:
       return comments[0]
 
 
+   def update_avatar(self, data):
+      # update avatar
+      self.cur.execute("""
+         BEGIN;
+         UPDATE users SET avatar = %s WHERE id = %s;
+         COMMIT;
+      """, (data["avatar"], data["owner_id"]))
+
+
+   def update_cover(self, data):
+      self.cur.execute("""
+         BEGIN;
+         UPDATE users SET cover = %s WHERE id = %s;
+         COMMIT;
+      """, (data["cover"], data["owner_id"]))
+
+
    def close_cur_conn(self):
       self.cur.close()
       self.conn.close()
@@ -1319,6 +1336,33 @@ def get_notifications(owner=None):
 
    return jsonify(notifications)
 
+
+# Update Owners Avatar
+@app.route("/api/users/avatar", methods=["POST"])
+@token_required
+def update_avatar(owner=None):
+   manager = DbManager()
+   data = json.loads(request.data)
+   data["owner_id"] = owner["id"]
+   manager.update_avatar(data)
+   print(data)
+   manager.close_cur_conn()
+
+   return jsonify({"message": 'successful'})
+
+
+# Update Owners Cover
+@app.route("/api/users/cover", methods=["POST"])
+@token_required
+def update_cover(owner=None):
+   manager = DbManager()
+   data = json.loads(request.data)
+   data["owner_id"] = owner["id"]
+   manager.update_cover(data)
+   print(data)
+   manager.close_cur_conn()
+
+   return jsonify({"message": 'successful'})
 
 
 # Run App
