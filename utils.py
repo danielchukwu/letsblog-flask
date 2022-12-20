@@ -136,12 +136,16 @@ def group_record(record: dict, seen: dict, unseen: dict, seen_ids: dict, unseen_
             weeks_ago = (current.day - date.day) // 7
             record['ago'] = f'{weeks_ago} weeks ago' if weeks_ago != 1 else f'{weeks_ago} week ago'
             add_seen_unseen('this_month')
-      # This Year
+      # This Year or Last Month
       else:
          # record['section'] = 'year'
          months_ago = (current.month - date.month)
          record['ago'] = f'{months_ago} months ago' if months_ago != 1 else f'{months_ago} month ago'
-         add_seen_unseen('this_year')
+         if months_ago == 1:
+            add_seen_unseen('last_month')
+         else:
+            add_seen_unseen('this_year')
+
    # Old
    else:
       record['section'] = 'old'
