@@ -1,9 +1,8 @@
-from ast import arg
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+# from ast import arg
+from flask import Flask, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 import os
-from functools import wraps
 import jwt
 import datetime
 from dotenv import load_dotenv
