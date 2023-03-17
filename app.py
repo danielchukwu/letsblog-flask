@@ -1022,7 +1022,7 @@ def token_required(f):
 
         if token:
             info = jwt.decode(token, key=os.getenv(
-                'FLASK_APP_SECRET'), algorithms=["HS256"])
+                'FLASK_APP_JWT_SECRET_KEY'), algorithms=["HS256"])
             db = DbManager()
             user = db.get_user(user_id=info['user_id'])
             db.close_cur_conn()
@@ -1358,7 +1358,6 @@ def update_cover(owner=None):
     data = json.loads(request.data)
     data["owner_id"] = owner["id"]
     manager.update_cover(data)
-    # print(data)
     manager.close_cur_conn()
 
     return jsonify({"message": 'successful'})
