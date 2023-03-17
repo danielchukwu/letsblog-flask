@@ -18,6 +18,14 @@ ALLOWED_URLS = ["http://localhost:3000"]
 OPEN_ROUTES = ['index']  # Routes that don't require authentication
 DAYS_TOKEN_LAST = 1
 
+PORT  = 5000
+HOST  = '0.0.0.0'
+DEBUG = True
+
+# Create flask app
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}}, origins=ALLOWED_URLS)
+
 
 # Manage database related tasks
 class DbManager:
@@ -1009,10 +1017,7 @@ class UserManager:
 # Token Decorator
 def token_required(f):
     def decorator(*args, **kwargs):
-        token = request.args.get('x-access-token') if request.args.get(
-            'x-access-token') else request.headers.get('X-Access-Token')
-        # print(request.headers.get('X-Access-Token'))
-
+        token = request.headers.get('x-access-token') or request.args.get('x-access-token')
         user = None
 
         if token:
@@ -1037,9 +1042,6 @@ def token_required(f):
     return decorator
 
 
-# Create flask app
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, origins=ALLOWED_URLS)
 
 
 # Routes
@@ -1049,7 +1051,6 @@ def index(owner=None):
     db = DbManager()
     blogs = db.get_blogs()
     db.close_cur_conn()
-    # data = {blogs}
     return jsonify(blogs)
 
 
@@ -1369,4 +1370,4 @@ if __name__ == "__main__":
     # print(os.getenv("FLASK_APP_DB_DATABASE"))
     # print(os.getenv("FLASK_APP_DB_USERNAME"))
     # print(os.getenv("FLASK_APP_DB_PASSWORD"))
-    app.run(port=5000, debug=True, host='0.0.0.0')
+    app.run(port=PORT, debug=DEBUG, host=HOST)
