@@ -1003,7 +1003,7 @@ class UserManager:
 #          return jsonify({'message': 'a valid token is missing'})
 #       try:
 #          print(token)
-#          data = jwt.decode(token, os.getenv('FLASK_APP_SECRET'), algorithms=["HS256"])
+#          data = jwt.decode(token, os.getenv('FLASK_APP_JWT_SECRET_KEY'), algorithms=["HS256"])
 #          db = DbManager()
 #          current_user = db.get_user()
 #          db.close_cur_conn()
@@ -1019,6 +1019,7 @@ def token_required(f):
     def decorator(*args, **kwargs):
         token = request.headers.get('x-access-token') or request.args.get('x-access-token')
         user = None
+        print(token)
 
         if token:
             info = jwt.decode(token, key=os.getenv(
@@ -1127,7 +1128,7 @@ def login():
 
     if user:
         token = jwt.encode({'user_id': user[0], 'exp': datetime.datetime.utcnow(
-        ) + datetime.timedelta(days=DAYS_TOKEN_LAST)}, os.getenv('FLASK_APP_SECRET'), "HS256")
+        ) + datetime.timedelta(days=DAYS_TOKEN_LAST)}, os.getenv('FLASK_APP_JWT_SECRET_KEY'), "HS256")
         return jsonify({'token': token})
     return jsonify({'message': 'unsuccessful'})
 
