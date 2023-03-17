@@ -1365,8 +1365,16 @@ def update_cover(owner=None):
 
 # Run App
 if __name__ == "__main__":
+<<<<<<< HEAD
     # print(os.getenv("FLASK_APP_DB_HOST"))
     # print(os.getenv("FLASK_APP_DB_DATABASE"))
     # print(os.getenv("FLASK_APP_DB_USERNAME"))
     # print(os.getenv("FLASK_APP_DB_PASSWORD"))
     app.run(port=PORT, debug=DEBUG, host=HOST)
+=======
+    print(os.getenv("FLASK_APP_DB_HOST"))
+    print(os.getenv("FLASK_APP_DB_DATABASE"))
+    print(os.getenv("FLASK_APP_DB_USERNAME"))
+    print(os.getenv("FLASK_APP_DB_PASSWORD"))
+    app.run(port=5000, debug=False, host='0.0.0.0')
+>>>>>>> 84b47810dcf50dd83f33a93e5177f7b74b170223
